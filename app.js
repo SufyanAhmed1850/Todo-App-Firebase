@@ -1,13 +1,18 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.1.0/firebase-app.js";
 import {
     getFirestore,
+    doc,
+    addDoc,
     collection,
     getDocs,
-    addDoc,
-    deleteDoc,
     updateDoc,
-    doc,
-} from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
+    deleteDoc,
+    onSnapshot,
+    orderBy,
+    query,
+    where,
+    Timestamp,
+} from "https://www.gstatic.com/firebasejs/10.1.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyAOICRpZWicoK_6BW1gl4MtAeNpLKdE_kE",
@@ -17,48 +22,89 @@ const firebaseConfig = {
     messagingSenderId: "375693282485",
     appId: "1:375693282485:web:6e50779db0703ceb3842fc",
 };
-
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-window.editData = async function (documentId, newData) {
+gsap.to("#loader > *", {
+    y: 0,
+    opacity: 1,
+    ease: "power4.out",
+    stagger: 0.1,
+    duration: 1,
+});
+
+const disableLoader = () => {
+    gsap.to("#loader > *", {
+        y: -50,
+        opacity: 0,
+        ease: "power4.in",
+        stagger: 0.1,
+        duration: 1,
+        onComplete: () => {
+            document.getElementById("loader").style.display = "none";
+            document.querySelector(".grand-container").style.display = "flex";
+        },
+    });
+};
+
+// -----------------------------------------------------------------------------Theme Switcher--------------------------------------------------------------------------------//
+const switchTheme = (colorScheme) => {
+    var themeIcon = document.getElementById("themeIcon");
+    var element = document.body;
+    if (colorScheme === "light") {
+        element.classList.add("lightTheme");
+        themeIcon.src = "./images/icon-moon.svg";
+        themeIcon.style.filter = "invert(80%)";
+    } else if (colorScheme === "dark") {
+        element.classList.remove("lightTheme");
+        themeIcon.src = "./images/icon-sun.svg";
+        themeIcon.style.filter = "invert(0%)";
+    }
+};
+// -----------------------------------------------------------------------------Check If User Does Not Prefers dark Scheme---------------------------------------------------//
+const localTheme = JSON.parse(localStorage.getItem("theme"));
+if (localTheme === "light") {
+    switchTheme("light");
+} else if (JSON.parse(localStorage.getItem("theme")) === "dark") {
+    switchTheme("dark");
+} else if (!localTheme) {
+    if (!window.matchMedia("(prefers-color-scheme: dark)").matches) {
+        switchTheme("light");
+    }
+}
+// -----------------------------------------------------------------------------Calls Theme Switcher--------------------------------------------------------------------------------//
+window.theme = function () {
+    var element = document.body;
+    element.classList.toggle("lightTheme");
+    if (element.classList.contains("lightTheme")) {
+        localStorage.setItem("theme", JSON.stringify("light"));
+        switchTheme("light");
+    } else {
+        localStorage.setItem("theme", JSON.stringify("dark"));
+        switchTheme("dark");
+    }
+};
+
+const editData = async (documentId, newData) => {
     try {
-        const docRef = doc(db, "todos", documentId); // Replace "todos" with your collection name
+        const docRef = doc(db, "todos", documentId);
         await updateDoc(docRef, newData);
         console.log("Document successfully updated!");
     } catch (error) {
         console.error("Error updating document: ", error);
     }
 };
-window.deleteData = async function (documentId) {
-    console.log(documentId);
+
+const deleteData = async (id) => {
+    console.log(id);
     try {
-        const docRef = doc(db, "todos", documentId); // Replace "todos" with your collection name
-        await deleteDoc(docRef);
+        await deleteDoc(doc(db, "todos", id));
         console.log("Document successfully deleted!");
     } catch (error) {
         console.error("Error deleting document: ", error);
     }
 };
-// -----------------------------------------------------------------------------Check If User Does Not Prefers dark Scheme---------------------------------------------------//
-if (!window.matchMedia("(prefers-color-scheme: dark)").matches) {
-    document.body.classList.toggle("lightTheme");
-    themeIcon.src = "./images/icon-moon.svg";
-    themeIcon.style.filter = "invert(80%)";
-}
-// -----------------------------------------------------------------------------Toggles Theme--------------------------------------------------------------------------------//
-window.theme = function () {
-    var element = document.body;
-    var themeIcon = document.getElementById("themeIcon");
-    element.classList.toggle("lightTheme");
-    if (element.classList.contains("lightTheme")) {
-        themeIcon.src = "./images/icon-moon.svg";
-        themeIcon.style.filter = "invert(80%)";
-    } else {
-        themeIcon.src = "./images/icon-sun.svg";
-        themeIcon.style.filter = "invert(0%)";
-    }
-};
+
 // -----------------------------------------------------------------------------Get Todo Container
 var todoContainer = document.getElementById("todoContainer");
 // -----------------------------------------------------------------------------Get User Input
@@ -67,46 +113,47 @@ var userTodo = document.getElementById("userTodo");
 var submit = document.getElementById("submit");
 // -----------------------------------------------------------------------------Get left Count Element
 var leftItems = document.getElementById("leftItems");
-// -----------------------------------------------------------------------------Get All TodoItem
-var allTodo = [];
-// -----------------------------------------------------------------------------Get Active TodoItem
-var activeTodo = [];
-// -----------------------------------------------------------------------------Get Completed TodoItem
-var completedTodo = [];
 // -----------------------------------------------------------------------------Set Old Todo If Todo Is Null
 var oldTodo = "";
-window.getData = async function () {
+const getData = async () => {
     try {
-        const storedData = await getDocs(collection(db, "todos"));
-        storedData.forEach((doc) => {
-            // if(doc.data() && doc.data() !== ""){
+        const dbTodos = query(
+            collection(db, "todos"),
+            orderBy("timestamp", "asc")
+        );
+        const querySnapshot = await getDocs(dbTodos);
+        todoContainer.innerHTML = "";
+        querySnapshot.docs.forEach((doc, index) => {
+            console.log(querySnapshot.size, index);
             setTodo(doc.id, doc.data());
-            // }
-            // console.log("Doc ID ==>", doc.id);
-            // console.log("Doc ==>", doc.data());
         });
+        disableLoader();
     } catch (error) {
-        console.log(error.message);
+        console.log(error);
     }
 };
 getData();
-
+const activeCount = async () => {
+    try {
+        // -------------------------------------------------------------------------Updates Length Of TodoList
+        const dbTodos = query(
+            collection(db, "todos"),
+            where("isCompleted", "==", false)
+        );
+        const querySnapshot = await getDocs(dbTodos);
+        console.log(querySnapshot.size);
+        leftItems.innerHTML = querySnapshot.size + " items left";
+    } catch (error) {
+        console.error(error);
+    }
+};
+activeCount();
 // -----------------------------------------------------------------------------Creates A TodoItem---------------------------------------------------------------------------//
-window.setTodo = async function (inputId, inputData) {
+const setTodo = async (inputId, inputData) => {
     if (inputData || (!inputData && userTodo.value)) {
         var idOfInput;
-        if (!inputId && !inputData) {
-            try {
-                const docRef = await addDoc(collection(db, "todos"), {
-                    todoValue: userTodo.value,
-                    isCompleted: false,
-                });
-                idOfInput = docRef.id;
-                console.log("Document written with ID: ", docRef.id);
-            } catch (e) {
-                console.error("Error adding document: ", e);
-            }
-        }
+        let todoValue = userTodo.value;
+        userTodo.value = "";
         // -------------------------------------------------------------------------Create Parent Todo
         var todo = document.createElement("div");
         // -------------------------------------------------------------------------Create Parent Raido
@@ -126,7 +173,7 @@ window.setTodo = async function (inputId, inputData) {
         // -------------------------------------------------------------------------Create Sort Img
         var sortImg = document.createElement("img");
         // -------------------------------------------------------------------------Set Parent Todo Attributes
-        // todo.setAttribute("id", "todo");
+        todo.setAttribute("id", "todo");
         todo.className = "todo todoCtnr";
         todo.setAttribute("onmouseover", "changesBtn(this, 'over')");
         todo.setAttribute("onmouseout", "changesBtn(this, 'out')");
@@ -141,7 +188,7 @@ window.setTodo = async function (inputId, inputData) {
         radio.classList.add("class", "radio");
         radio.setAttribute("onclick", "toggleRadio(this)");
         // -------------------------------------------------------------------------Set Input Field Attributes
-        input.setAttribute("id", "todoItem");
+        // input.setAttribute("id", "todoItem");
         input.setAttribute("class", "todoItem");
         input.setAttribute("type", "text");
         input.setAttribute("disabled", "true");
@@ -149,7 +196,7 @@ window.setTodo = async function (inputId, inputData) {
             input.setAttribute("value", inputData.todoValue);
             var val = "local";
         } else {
-            input.setAttribute("value", userTodo.value);
+            input.setAttribute("value", todoValue);
             var val = "user";
         }
         input.setAttribute("onblur", "diableField(this)");
@@ -158,8 +205,6 @@ window.setTodo = async function (inputId, inputData) {
         input.setAttribute("disabled", "false");
         if (inputId) {
             input.setAttribute("id", inputId);
-        } else {
-            input.setAttribute("id", idOfInput);
         }
         // -------------------------------------------------------------------------Set Parent Img Attributes
         edits.setAttribute("id", "edits");
@@ -194,16 +239,30 @@ window.setTodo = async function (inputId, inputData) {
         todo.appendChild(input);
         // -------------------------------------------------------------------------Append Edits To Parent (Todo)
         todo.appendChild(edits);
-        // -------------------------------------------------------------------------Reset Value Of UserInput
-        userTodo.value = "";
         // -------------------------------------------------------------------------Append Parent (Todo) To TodoContainer
         todoContainer.insertBefore(todo, todoContainer.firstChild);
-        // -------------------------------------------------------------------------Set Length Of TodoList
-        leftItems.innerHTML = activeTodo.length + " items left";
+        // -------------------------------------------------------------------------Set Data To Firebase
+        if (!inputId && !inputData) {
+            try {
+                const docRef = await addDoc(collection(db, "todos"), {
+                    todoValue: todoValue,
+                    isCompleted: false,
+                    timestamp: Timestamp.now(),
+                });
+                idOfInput = docRef.id;
+                if (!inputId) {
+                    input.setAttribute("id", idOfInput);
+                }
+                console.log("Document written with ID: ", docRef.id);
+                await activeCount();
+            } catch (e) {
+                console.error("Error adding document: ", e);
+            }
+        }
         // -------------------------------------------------------------------------Calls Function That Sets todoItem To Local
+
         switch (val) {
             case "user":
-                // to();
                 break;
             default:
                 completedStyles();
@@ -263,16 +322,13 @@ window.runEdit = function (editBtn) {
         editBtn.setAttribute("src", "./images/icon-check.svg");
         // ---------------------------------------------------------------------If Todo Input Is Enabled
     } else {
-        if (!todoItem.value) {
+        if (!todoItem.value.trim()) {
             todoItem.value = oldTodo;
-            todoItem.setAttribute("disabled", "true");
-        } else {
-            todoItem.setAttribute("disabled", "true");
         }
+        todoItem.setAttribute("disabled", "true");
         editBtn.setAttribute("src", "./images/icon-pencil.svg");
         editData(todoItem.id, {
             todoValue: todoItem.value,
-            isCompleted: false,
         });
     }
 };
@@ -291,47 +347,42 @@ window.diableField = function (element) {
     }, 100);
 };
 // -----------------------------------------------------------------------------Deletes A Todo Item & Updates Length Of Todo Items-------------------------------------------//
-window.del = function (element) {
+window.del = async function (element) {
     // -------------------------------------------------------------------------Deletes A Todo Item
     var todo = element.parentElement.parentElement;
     let idPara = todo.querySelector(".todoItem").id;
     todo.remove();
     deleteData(idPara);
+    await activeCount();
 };
 // -----------------------------------------------------------------------------Adds Checked Class On Radio------------------------------------------------------------------//
-window.toggleRadio = function (element) {
+window.toggleRadio = async function (element) {
     // -------------------------------------------------------------------------Targetting Radio Btn
     var radio = element;
     var todo = radio.parentNode.parentNode;
     var input = todo.querySelector(".todoItem");
-    console.log();
     // -------------------------------------------------------------------------Removes/Add Checked Class To Radio Btn
     if (radio.classList.contains("checked")) {
         radio.classList.remove("checked");
         input.style.textDecoration = "none";
         input.style.color = "var(--clr-txt)";
-        editData(input.id, {
-            todoValue: input.value,
+        await editData(input.id, {
             isCompleted: false,
         });
     } else {
         radio.classList.add("checked");
         input.style.textDecoration = "line-through";
         input.style.color = "var(--clr-disabled-input)";
-        editData(input.id, {
-            todoValue: input.value,
+        await editData(input.id, {
             isCompleted: true,
         });
     }
-    // -------------------------------------------------------------------------Updates Length Of TodoList
-    leftItems.innerHTML = activeTodo.length + " items left";
-    // -------------------------------------------------------------------------Calls Function That Sets todoItem To Local
-    // toLocal();
+    await activeCount();
 };
 // -----------------------------------------------------------------------------Sets Style on todoItems if Radio Is Checked--------------------------------------------------//
-window.completedStyles = function () {
-    var todoItems = todoContainer.children;
-    var todoItemsArr = [...todoItems];
+const completedStyles = () => {
+    let todoItems = todoContainer.children;
+    let todoItemsArr = [...todoItems];
     for (var i = 0; i < todoItemsArr.length; i++) {
         var checkedRadio = todoItemsArr[i].querySelector(".radio");
         if (checkedRadio.className.includes("checked")) {
@@ -344,69 +395,88 @@ window.completedStyles = function () {
         }
     }
 };
-// -----------------------------------------------------------------------------Deletes Completed Todo Items-----------------------------------------------------------------//
-window.delCompleted = function () {
-    for (i = 0; i < completedTodo.length; i++) {
-        completedTodo[i].parentNode.remove();
+//! Delte Completed Todo from DB
+const deleteCompDB = async () => {
+    try {
+        const dbTodos = query(
+            collection(db, "todos"),
+            where("isCompleted", "==", true)
+        );
+        const querySnapshot = await getDocs(dbTodos);
+        querySnapshot.docs.forEach((doc, index) => {
+            deleteDoc(doc.ref);
+            console.log("Todo successfully deleted!");
+        });
+    } catch (err) {
+        console.log(err);
     }
-    // -------------------------------------------------------------------------Updates Length Of TodoList
-    leftItems.innerHTML = activeTodo.length + " items left";
-    // -------------------------------------------------------------------------Calls Function That Sets todoItem To Local
-    // toLocal();
 };
-// -----------------------------------------------------------------------------Shows Only Completed TodoItems---------------------------------------------------------------//
-// window.showCompleted = function () {
-//     var all = document.getElementById("all");
-//     var active = document.getElementById("active");
-//     var completed = document.getElementById("completed");
-//     all.classList.remove("focus");
-//     active.classList.remove("focus");
-//     completed.classList.add("focus");
-//     todoContainer.innerHTML = "";
-//     for (var i = 0; i < completedTodo.length; i++) {
-//         var completedTodoParent = completedTodo[i].parentNode;
-//         todoContainer.appendChild(completedTodoParent);
-//     }
-//     // -------------------------------------------------------------------------Updates Length Of TodoList
-//     leftItems.innerHTML = activeTodo.length + " items left";
-// };
-// // -----------------------------------------------------------------------------Shows Only Active TodoItems------------------------------------------------------------------//
-// window.showActive = function () {
-//     var all = document.getElementById("all");
-//     var active = document.getElementById("active");
-//     var completed = document.getElementById("completed");
-//     all.classList.remove("focus");
-//     active.classList.add("focus");
-//     completed.classList.remove("focus");
-//     todoContainer.innerHTML = "";
-//     for (var i = 0; i < activeTodo.length; i++) {
-//         var activeTodoParent = activeTodo[i].parentNode;
-//         todoContainer.appendChild(activeTodoParent);
-//     }
-//     // -------------------------------------------------------------------------Updates Length Of TodoList
-//     leftItems.innerHTML = activeTodo.length + " items left";
-// };
-// // -----------------------------------------------------------------------------Shows All TodoItems--------------------------------------------------------------------------//
-// window.showAll = function () {
-//     var all = document.getElementById("all");
-//     var active = document.getElementById("active");
-//     var completed = document.getElementById("completed");
-//     all.classList.add("focus");
-//     active.classList.remove("focus");
-//     completed.classList.remove("focus");
-//     todoContainer.innerHTML = "";
-//     for (var i = 0; i < allTodo.length; i++) {
-//         var allTodoParent = allTodo[i].parentNode;
-//         todoContainer.appendChild(allTodoParent);
-//     }
-//     // -------------------------------------------------------------------------Updates Length Of TodoList
-//     leftItems.innerHTML = activeTodo.length + " items left";
-// };
+// -----------------------------------------------------------------------------Deletes Completed Todo Items-----------------------------------------------------------------//
+window.delCompleted = async function () {
+    let todoItems = [...todoContainer.children];
+    todoItems.forEach((todo) => {
+        if (todo.querySelector(".radio").classList.contains("checked")) {
+            todo.remove();
+        }
+    });
+    deleteCompDB();
+    // -------------------------------------------------------------------------Updates Length Of TodoList
+    // await activeCount();
+};
 // -----------------------------------------------------------------------------Allows User To Sort todoItems-------------------------------------------------------------------//
 new Sortable(todoContainer, {
-    animation: 150,
+    animation: 350,
     handle: ".sort",
     onEnd: function () {
-        // toLocal();
+        console.log("Sorted");
     },
 });
+
+//? Show Active Function
+
+window.handleTodos = async function (req, event) {
+    try {
+        let submit = document.querySelector("#submit");
+        let btnParent = [...event.parentNode.children];
+        let dbTodos;
+        switch (req) {
+            case "active":
+                dbTodos = query(
+                    collection(db, "todos"),
+                    where("isCompleted", "==", false),
+                    orderBy("timestamp", "asc")
+                );
+                break;
+            case "completed":
+                dbTodos = query(
+                    collection(db, "todos"),
+                    where("isCompleted", "==", true),
+                    orderBy("timestamp", "asc")
+                );
+                break;
+            default:
+                dbTodos = query(
+                    collection(db, "todos"),
+                    orderBy("timestamp", "asc")
+                );
+        }
+        const querySnapshot = await getDocs(dbTodos);
+        todoContainer.innerHTML = "";
+        btnParent.forEach((btn) => {
+            console.log(btn);
+            btn.classList.remove("focus");
+        });
+        event.classList.add("focus");
+        querySnapshot.docs.forEach((doc, index) => {
+            console.log(querySnapshot.size, index);
+            setTodo(doc.id, doc.data());
+        });
+        if (event.id == "completed") {
+            submit.classList.add("disabledBtn");
+        } else {
+            submit.classList.remove("disabledBtn");
+        }
+    } catch (error) {
+        console.log(error);
+    }
+};

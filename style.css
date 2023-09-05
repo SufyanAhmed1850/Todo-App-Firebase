@@ -5,6 +5,7 @@
     padding: 0;
     box-sizing: border-box;
     font-family: 'Josefin Sans', sans-serif;
+    -webkit-tap-highlight-color: transparent;
 }
 
 :root {
@@ -25,6 +26,8 @@
     --bg-track: #404149;
     --clr-thumb: #c5c5c5;
     --clr-bottom-border: #343546;
+    --svg-fill-dark: #FFFFFF;
+    --svg-fill-light: #57585f;
 }
 
 .lightTheme {
@@ -44,6 +47,8 @@
     --bg-track: #b4b4b4;
     --clr-thumb: #424242;
     --clr-bottom-border: #97979736;
+    --svg-fill-dark: #171823;
+    --svg-fill-light: #767779;
 }
 
 body {
@@ -288,4 +293,74 @@ img {
     .filters {
         flex-direction: column;
     }
+}
+
+.grand-container {
+    display: none;
+}
+
+#loader {
+    width: 100%;
+    height: 100dvh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    gap: 25px;
+}
+
+#loader>* {
+    transform: translateY(50px);
+    opacity: 0;
+}
+
+svg {
+    max-width: 350px;
+    filter: invert(0);
+}
+
+.dark-fill {
+    fill: var(--svg-fill-dark);
+
+
+}
+
+.light-fill {
+    fill: var(--svg-fill-light);
+}
+
+.progress {
+    position: relative;
+    height: 10px;
+    max-width: 200px;
+    width: 30%;
+    border: 10px solid #767779;
+    border-radius: 15px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.progress .color {
+    position: absolute;
+    background-color: #ffffff;
+    width: 0;
+    height: 10px;
+    border-radius: 15px;
+    transition: all ease-out 500ms;
+    animation: progress 500ms infinite alternate-reverse ease-in-out;
+}
+
+@keyframes progress {
+    from {
+        width: 5%;
+    }
+
+    to {
+        width: 100%;
+    }
+}
+
+.disabledBtn {
+    pointer-events: none;
 }
